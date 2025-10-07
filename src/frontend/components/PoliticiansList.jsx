@@ -2,6 +2,9 @@
 import React from "react";
 import { useState, useEffect, useMemo, memo } from "react";
 
+//* importo componenti
+import PoliticianCard from "./PoliticianCard";
+
 //* Preparo la Funzione di Filtro Esterna
 const applyFilter = (data, query) => {
   //QUERY VUOTA: Se la query non è presente o è solo spazi, restituisco tutti i dati.
@@ -37,6 +40,9 @@ function PoliticiansList() {
   const [isLoading, setIsLoading] = useState(true); //impostato su true perchè il componente caricherà subito i dati
   const [error, setError] = useState(null); //Sarà null finché non ci sarà un problema. In caso di fallimento, ci salverò il messaggio di errore.
 
+  // --creo lo stato per salvare la query digitata dall'utente
+  const [searchQuery, setSearchQuery] = useState("");
+
   //* Implemento la Chiamata API (useEffect)
   // Definisco la Funzione di Fetch
   // Chiamando useEffect(() => { ... }, [])
@@ -68,32 +74,39 @@ function PoliticiansList() {
     fetchPoliticians();
   }, []);
 
+  //* ottimizzo con useMemo()
+  // hook nativo di react al quale passo delle dipendenze, mi ritorna il risultato di un calcolo pesante
+  // memorizzandolo nella variabile dichiarata
+  const filteredPoliticians = useMemo(() => {
+    return applyFilter(dataPoliticians, searchQuery);
+  }, [dataPoliticians, searchQuery]);
+
   return (
-    <div className="politicians-container">
-      {/* CONDIZIONE DI CARICAMENTO */}
-      {isLoading && <h1>Caricamento dei politici...</h1>}
+    <>
+      <div className="politicians-container">
+        {/* CONDIZIONE DI CARICAMENTO */}
+        {isLoading && <h1>Caricamento dei politici...</h1>}
 
-      {/* CONDIZIONE DI ERRORE */}
-      {error && !isLoading && <h1 style={{ color: "red" }}>Errore nel recupero dati: {error}</h1>}
+        {/* CONDIZIONE DI ERRORE */}
+        {error && !isLoading && <h1 style={{ color: "red" }}>Errore nel recupero dati: {error}</h1>}
 
-      {/* VISUALIZZAZIONE DEI DATI */}
-      {!isLoading && !error && (
-        <div className="card-list">
-          {dataPoliticians.map((politician) => (
-            <div key={politician.id} className="politician-card">
-              <img
-                src={politician.image}
-                alt={politician.name}
-                style={{ width: "100px", height: "100px", objectFit: "cover" }}
+        <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        {/* VISUALIZZAZIONE DEI DATI */}
+        {!isLoading && !error && (
+          <div className="card-list">
+            {filteredPoliticians.map((politician) => (
+              // Sostituisco l'intero vecchio div con la Card ottimizzata
+              <PoliticianCard
+                // La key è cruciale per il map
+                key={politician.id}
+                // Passo l'oggetto intero come prop per la memorizzazione
+                politician={politician}
               />
-              <h2>{politician.name}</h2>
-              <p>Ruolo: {politician.position}</p>
-              <p>{politician.biography}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
