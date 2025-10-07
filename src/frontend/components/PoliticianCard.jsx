@@ -1,11 +1,10 @@
-import { memo } from "react";
+import React, { memo } from "react";
 
 //* Definisco la funzione componente PoliticianCard che riceverà l'oggetto politician come unica prop
 function PoliticianCard({ politician }) {
-  // Log per la verifica (prima del return)
+  // Log di verifica per la Milestone 3
   console.log("[Card Rendered] " + politician.name);
 
-  // Ritorna SOLO la singola card
   return (
     <div className="politician-card">
       <img
@@ -20,4 +19,5 @@ function PoliticianCard({ politician }) {
   );
 }
 
+//* Esporto il componente avvolto in memo per l'ottimizzazione
 export default memo(PoliticianCard);

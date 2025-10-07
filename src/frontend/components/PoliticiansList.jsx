@@ -1,113 +1,221 @@
-//* IMPORTO react e hook
-import React from "react";
-import { useState, useEffect, useMemo, memo } from "react";
-
-//* importo componenti
+import React, { useState, useEffect, useMemo, memo } from "react";
 import PoliticianCard from "./PoliticianCard";
 
-//* Preparo la Funzione di Filtro Esterna
-const applyFilter = (data, query) => {
-  //QUERY VUOTA: Se la query non è presente o è solo spazi, restituisco tutti i dati.
-  if (!query || query.trim() === "") {
-    return data;
-  }
+// ******************************************************
+// Funzione Esterna per Filtro (Milestone 2 + Bonus)
+// ******************************************************
+const applyFilter = (data, query, positionFilter) => {
+    // Caso base: se i dati non ci sono, restituisco array vuoto
+    if (!data || data.length === 0) {
+        return [];
+    }
+    
+    let filteredData = data;
 
-  //Converto la query una sola volta (più efficiente).
-  const normalizedQuery = query.toLowerCase().trim();
+    // Filtro 1: Query (Nome/Biografia)
+    if (query && query.trim() !== "") {
+        const normalizedQuery = query.toLowerCase().trim();
+        filteredData = filteredData.filter((politician) => {
+            const nameMatch = politician.name?.toLowerCase().includes(normalizedQuery);
+            const bioMatch = politician.biography?.toLowerCase().includes(normalizedQuery);
+            return nameMatch || bioMatch;
+        });
+    }
 
-  //Controllo name O biography con filter
-  const newData = data.filter((politician) => {
-    // Normalizzo il nome del politico e controllo se include la query
-    const nameMatch = politician.name?.toLowerCase().includes(normalizedQuery);
+    // Filtro 2: Posizione (Bonus)
+    if (positionFilter && positionFilter !== 'All') {
+        filteredData = filteredData.filter((politician) => 
+            politician.position === positionFilter
+        );
+    }
 
-    // Normalizzo la biografia e controllo se include la query
-    const bioMatch = politician.biography?.toLowerCase().includes(normalizedQuery);
-
-    // Restituisco true se c'è una corrispondenza nel nome O nella biografia
-    return nameMatch || bioMatch;
-  });
-
-  return newData;
+    return filteredData;
 };
 
-//* funzione componente
+// ******************************************************
+// Componente Principale
+// ******************************************************
 function PoliticiansList() {
-  //* Inizializzo lo Stato e gli Effetti (Hook React)
-  // Crea lo Stato per i Dati (politicians)
-  const [dataPoliticians, setDataPoliticians] = useState([]);
+    // Stati di Base (Milestone 1)
+    const [dataPoliticians, setDataPoliticians] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-  // Crea lo Stato per la Gestione (isLoading e error):
-  const [isLoading, setIsLoading] = useState(true); //impostato su true perchè il componente caricherà subito i dati
-  const [error, setError] = useState(null); //Sarà null finché non ci sarà un problema. In caso di fallimento, ci salverò il messaggio di errore.
+    // Stati di Ricerca (Milestone 2)
+    const [searchQuery, setSearchQuery] = useState("");
 
-  // --creo lo stato per salvare la query digitata dall'utente
-  const [searchQuery, setSearchQuery] = useState("");
+    // Stati di Paginazione e Bonus
+    const [currentPage, setCurrentPage] = useState(1); // Milestone 4
+    const [selectedPosition, setSelectedPosition] = useState('All'); // Bonus
+    const itemsPerPage = 6; // Definisco quanti elementi per pagina
 
-  //* Implemento la Chiamata API (useEffect)
-  // Definisco la Funzione di Fetch
-  // Chiamando useEffect(() => { ... }, [])
-  // e al suo interno, definisco una funzione async chiamata fetchPoliticians.
-  //? useEffect è il posto giusto per le operazioni che React non gestisce direttamente,
-  //? come la comunicazione con un server esterno.
-  useEffect(() => {
-    const fetchPoliticians = async () => {
-      // nel try effettuo la chiamata e controllo se la risposta è ok, se non lo è gestisco un nuovo errore
-      try {
-        const response = await fetch("http://localhost:3333/politicians");
-        if (!response.ok) {
-          throw new Error("Il server non risponde");
+    // ******************************************************
+    // Logica di Fetch (Milestone 1 - Eseguita solo al mount)
+    // ******************************************************
+    useEffect(() => {
+        const fetchPoliticians = async () => {
+            try {
+                // Milestone 2: Chiamata senza parametri per filtro lato client
+                const response = await fetch("http://localhost:3333/politicians"); 
+                if (!response.ok) {
+                    throw new Error("Il server non risponde");
+                }
+                const data = await response.json();
+                setDataPoliticians(data);
+            } catch (error) {
+                setError(error.message);
+                console.error("Chiamata al server fallita:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchPoliticians();
+    }, []); // Array di dipendenze vuoto: carica una sola volta.
+
+
+    // ******************************************************
+    // Logica Ottimizzata (Filtro, Paginazione e Totali)
+    // ******************************************************
+    const { 
+        currentItems, 
+        totalPages, 
+        totalFilteredItems 
+    } = useMemo(() => {
+        // 1. FILTRAZIONE (Milestone 2 + Bonus)
+        const filtered = applyFilter(dataPoliticians, searchQuery, selectedPosition);
+        
+        // 2. CALCOLO PAGINAZIONE (Milestone 4)
+        const totalItems = filtered.length;
+        const pages = Math.ceil(totalItems / itemsPerPage);
+        
+        // 3. TAGLIO ARRAY (Slice)
+        const indexOfLastItem = currentPage * itemsPerPage;
+        const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+        const paginated = filtered.slice(indexOfFirstItem, indexOfLastItem);
+        
+        // Se cambio filtro e la pagina corrente è oltre il nuovo totale, resetto
+        if (currentPage > pages && pages > 0) {
+             // Nota: questo chiamerà un re-render, ma è necessario per evitare bug
+             // React gestisce lo stato e l'esecuzione degli hook in modo sequenziale
+             setCurrentPage(pages);
         }
+        
+        return {
+            currentItems: paginated,
+            totalPages: pages,
+            totalFilteredItems: totalItems
+        };
+    }, [dataPoliticians, searchQuery, selectedPosition, currentPage, itemsPerPage]); // Tutte le dipendenze per il ricalcolo
 
-        // converto i dati
-        const data = await response.json();
-        // aggiorno lo stato
-        setDataPoliticians(data);
-      } catch (error) {
-        // Catturo l'errore come 'error'
-        // Imposto l'errore usando la variabile catturata 'error'
-        setError(error.message);
-        console.error("Chiamata al server fallita:", error);
-      } finally {
-        setIsLoading(false);
-      }
+    // ******************************************************
+    // Logica per le Posizioni Uniche (Bonus)
+    // ******************************************************
+    const uniquePositions = useMemo(() => {
+        if (!dataPoliticians || dataPoliticians.length === 0) return ['All'];
+
+        const positions = dataPoliticians
+            .map(p => p.position)
+            .filter(p => p); 
+            
+        return ['All', ...new Set(positions)]; 
+    }, [dataPoliticians]);
+
+    // Funzioni di navigazione (Milestone 4)
+    const goToPage = (pageNumber) => {
+        setCurrentPage(pageNumber);
     };
-    fetchPoliticians();
-  }, []);
 
-  //* ottimizzo con useMemo()
-  // hook nativo di react al quale passo delle dipendenze, mi ritorna il risultato di un calcolo pesante
-  // memorizzandolo nella variabile dichiarata
-  const filteredPoliticians = useMemo(() => {
-    return applyFilter(dataPoliticians, searchQuery);
-  }, [dataPoliticians, searchQuery]);
+    return (
+        <>
+            <div className="politicians-container">
+                {/* CONDIZIONI DI CARICAMENTO/ERRORE */}
+                {isLoading && <h1>Caricamento dei politici...</h1>}
+                {error && !isLoading && <h1 style={{ color: "red" }}>Errore nel recupero dati: {error}</h1>}
 
-  return (
-    <>
-      <div className="politicians-container">
-        {/* CONDIZIONE DI CARICAMENTO */}
-        {isLoading && <h1>Caricamento dei politici...</h1>}
+                {/* CONTROLLI FILTRI (Ricerca + Posizione) */}
+                <div className="filter-controls" style={{ display: 'flex', gap: '20px', margin: '20px 0' }}>
+                    
+                    {/* Input di Ricerca (Milestone 2) */}
+                    <input 
+                        type="text" 
+                        value={searchQuery}
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setCurrentPage(1); // Resetto pagina al cambio ricerca
+                        }}
+                        placeholder="Cerca per nome o biografia..."
+                    />
 
-        {/* CONDIZIONE DI ERRORE */}
-        {error && !isLoading && <h1 style={{ color: "red" }}>Errore nel recupero dati: {error}</h1>}
+                    {/* Select per la Posizione (Bonus) */}
+                    <select 
+                        value={selectedPosition}
+                        onChange={(e) => {
+                            setSelectedPosition(e.target.value);
+                            setCurrentPage(1); // Resetto pagina al cambio filtro
+                        }}
+                    >
+                        {uniquePositions.map(position => (
+                            <option key={position} value={position}>
+                                {position === 'All' ? 'Tutte le Posizioni' : position}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                
+                {/* VISUALIZZAZIONE DEI DATI */}
+                {!isLoading && !error && (
+                    <>
+                        <p>Mostrando {currentItems.length} di {totalFilteredItems} risultati totali.</p>
+                        
+                        <div className="card-list">
+                            {/* Mappa l'array paginato (Milestone 4) */}
+                            {currentItems.map((politician) => (
+                                <PoliticianCard
+                                    key={politician.id}
+                                    politician={politician} // Milestone 3: Card memoizzata
+                                />
+                            ))}
+                        </div>
+                        
+                        {/* Gestione Nessun Risultato */}
+                        {totalFilteredItems === 0 && (
+                            <p style={{ marginTop: '20px' }}>Nessun politico trovato con i filtri selezionati.</p>
+                        )}
 
-        <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        {/* VISUALIZZAZIONE DEI DATI */}
-        {!isLoading && !error && (
-          <div className="card-list">
-            {filteredPoliticians.map((politician) => (
-              // Sostituisco l'intero vecchio div con la Card ottimizzata
-              <PoliticianCard
-                // La key è cruciale per il map
-                key={politician.id}
-                // Passo l'oggetto intero come prop per la memorizzazione
-                politician={politician}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </>
-  );
+                        {/* CONTROLLI PAGINAZIONE (Milestone 4) */}
+                        {totalPages > 1 && (
+                            <div className="pagination-controls" style={{ marginTop: '20px' }}>
+                                <button
+                                    onClick={() => goToPage(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                >
+                                    Precedente
+                                </button>
+                                
+                                {/* Pulsanti numerici (solo quelli necessari) */}
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                    <button 
+                                        key={page}
+                                        onClick={() => goToPage(page)}
+                                        style={{ margin: '0 5px', fontWeight: currentPage === page ? 'bold' : 'normal' }}
+                                    >
+                                        {page}
+                                    </button>
+                                ))}
+
+                                <button
+                                    onClick={() => goToPage(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    Successiva
+                                </button>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        </>
+    );
 }
 
 export default PoliticiansList;
